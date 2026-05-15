@@ -2,7 +2,8 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Домашка</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Домашка — автообновление</title>
     <style>
         body { font-family: sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
         input, button { padding: 10px; margin: 5px 0; width: 100%; box-sizing: border-box; }
@@ -10,12 +11,13 @@
         .status { margin-top: 20px; padding: 10px; background: #f0f0f0; border-radius: 5px; }
         .error { color: red; }
         .success { color: green; }
+        pre { background: #eee; padding: 10px; overflow-x: auto; }
     </style>
 </head>
 <body>
-    <h1>Домашка — обновление</h1>
+    <h1>Домашка — автообновление</h1>
     
-    <label>GitHub токен (введи один раз):</label>
+    <label>GitHub токен:</label>
     <input type="password" id="token" placeholder="ghp_...">
     <button id="saveToken">Сохранить токен</button>
     
@@ -23,11 +25,14 @@
     
     <button id="run">Получить домашку и сохранить на GitHub</button>
     <div id="status" class="status"></div>
+    <pre id="output"></pre>
 
     <script>
         const REPO = 'fofankochevnik/fofankochevnik.github.io';
         const FILE = 'homework.json';
         const SCHOOL_API = 'https://edu.schools48.ru/apiv3/gethomework?devkey=6566345ff2850c724676decefe5c2117&out_format=json&auth_token=b73c9f3d2cf0def5559f0d5b472c8d677d6973881200dc781eb84a2a8cb13___209633&vendor=lpsk1733844979&student=1781';
+        
+        const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 
         function formatDate(date) {
             let y = date.getFullYear();
@@ -44,7 +49,9 @@
             d2.setDate(now.getDate() + 7);
 
             let url = `${SCHOOL_API}&startdate=${formatDate(d1)}&enddate=${formatDate(d2)}`;
-            let response = await fetch(url);
+            let proxiedUrl = CORS_PROXY + encodeURIComponent(url);
+            
+            let response = await fetch(proxiedUrl);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             return await response.json();
         }
@@ -102,13 +109,12 @@
             let token = document.getElementById('token').value;
             if (token.startsWith('ghp_')) {
                 localStorage.setItem('github_token', token);
-                document.getElementById('status').innerHTML = '✅ Токен сохранён (только на этом устройстве)';
+                document.getElementById('status').innerHTML = '✅ Токен сохранён';
             } else {
                 document.getElementById('status').innerHTML = '❌ Неверный токен';
             }
         };
 
-        // Основное действие
         document.getElementById('run').onclick = async () => {
             let token = localStorage.getItem('github_token');
             if (!token) {
@@ -117,24 +123,27 @@
             }
 
             let statusDiv = document.getElementById('status');
-            statusDiv.innerHTML = 'Запрашиваем школу...';
+            let outputPre = document.getElementById('output');
+            statusDiv.innerHTML = 'Запрашиваем школу через CORS-прокси...';
             try {
                 let raw = await fetchHomework();
                 let parsed = parseHomework(raw);
                 let jsonString = JSON.stringify(parsed, null, 2);
-                
+                outputPre.textContent = jsonString;
+
                 statusDiv.innerHTML = 'Сохраняем на GitHub...';
                 let sha = await getCurrentSHA(token);
                 await saveToGitHub(jsonString, sha, token);
 
                 statusDiv.innerHTML = '✅ Готово! Домашка обновлена на GitHub.';
+                statusDiv.className = 'status success';
             } catch (err) {
                 statusDiv.innerHTML = `❌ Ошибка: ${err.message}`;
+                statusDiv.className = 'status error';
                 console.error(err);
             }
         };
 
-        // Автоподстановка сохранённого токена
         let savedToken = localStorage.getItem('github_token');
         if (savedToken) document.getElementById('token').value = savedToken;
     </script>
