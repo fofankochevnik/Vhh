@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Домашка</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+        input, button { padding: 10px; margin: 5px 0; width: 100%; box-sizing: border-box; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; }
+        .status { margin-top: 20px; padding: 10px; background: #f0f0f0; border-radius: 5px; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <h1>Домашка — обновление</h1>
+    
+    <label>GitHub токен (введи один раз):</label>
+    <input type="password" id="token" placeholder="ghp_...">
+    <button id="saveToken">Сохранить токен</button>
+    
+    <hr>
+    
+    <button id="run">Получить домашку и сохранить на GitHub</button>
+    <div id="status" class="status"></div>
+
+    <script>
+        const REPO = 'fofankochevnik/fofankochevnik.github.io';
+        const FILE = 'homework.json';
+        const SCHOOL_API = 'https://edu.schools48.ru/apiv3/gethomework?devkey=6566345ff2850c724676decefe5c2117&out_format=json&auth_token=b73c9f3d2cf0def5559f0d5b472c8d677d6973881200dc781eb84a2a8cb13___209633&vendor=lpsk1733844979&student=1781';
+
+        function formatDate(date) {
+            let y = date.getFullYear();
+            let m = String(date.getMonth() + 1).padStart(2, '0');
+            let d = String(date.getDate()).padStart(2, '0');
+            return `${y}${m}${d}`;
+        }
+
+        async function fetchHomework() {
+            let now = new Date();
+            let d1 = new Date(now);
+            d1.setDate(now.getDate() + 1);
+            let d2 = new Date(now);
+            d2.setDate(now.getDate() + 7);
+
+            let url = `${SCHOOL_API}&startdate=${formatDate(d1)}&enddate=${formatDate(d2)}`;
+            let response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return await response.json();
+        }
+
+        function parseHomework(data) {
+            let days = data.response.result.students["1781"].days;
+            let subjectMap = {
+                "Математика":"math", "Русский язык":"rus", "Литературное чтение":"lit",
+                "Английский язык":"eng", "Окружающий мир":"okr"
+            };
+            let hwData = {}, chosenDate = null;
+            let sortedDates = Object.keys(days).sort();
+            for (let dateStr of sortedDates) {
+                let items = days[dateStr].items;
+                if (!items || Object.keys(items).length === 0) continue;
+                chosenDate = dateStr;
+                for (let subj in items) {
+                    let id = subjectMap[subj];
+                    if (!id) continue;
+                    let hw = items[subj].homework;
+                    let texts = [];
+                    for (let k in hw) if (hw[k].value) texts.push(hw[k].value);
+                    if (texts.length) hwData[id] = texts.join(" ");
+                }
+                break;
+            }
+            let subjects = Object.entries(hwData).map(([id, hw]) => ({ id, hw }));
+            return { date: chosenDate, subjects };
+        }
+
+        async function getCurrentSHA(token) {
+            let url = `https://api.github.com/repos/${REPO}/contents/${FILE}`;
+            let res = await fetch(url, { headers: { 'Authorization': `token ${token}` } });
+            if (res.status === 404) return null;
+            if (!res.ok) throw new Error(`SHA error: ${res.status}`);
+            let data = await res.json();
+            return data.sha;
+        }
+
+        async function saveToGitHub(content, sha, token) {
+            let url = `https://api.github.com/repos/${REPO}/contents/${FILE}`;
+            let body = { message: 'update homework', content: btoa(unescape(encodeURIComponent(content))), branch: 'main' };
+            if (sha) body.sha = sha;
+            let res = await fetch(url, {
+                method: 'PUT',
+                headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (!res.ok) throw new Error(`PUT error: ${res.status}`);
+            return await res.json();
+        }
+
+        // Загрузить токен из localStorage
+        document.getElementById('saveToken').onclick = () => {
+            let token = document.getElementById('token').value;
+            if (token.startsWith('ghp_')) {
+                localStorage.setItem('github_token', token);
+                document.getElementById('status').innerHTML = '✅ Токен сохранён (только на этом устройстве)';
+            } else {
+                document.getElementById('status').innerHTML = '❌ Неверный токен';
+            }
+        };
+
+        // Основное действие
+        document.getElementById('run').onclick = async () => {
+            let token = localStorage.getItem('github_token');
+            if (!token) {
+                document.getElementById('status').innerHTML = '❌ Сначала введи и сохрани токен';
+                return;
+            }
+
+            let statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = 'Запрашиваем школу...';
+            try {
+                let raw = await fetchHomework();
+                let parsed = parseHomework(raw);
+                let jsonString = JSON.stringify(parsed, null, 2);
+                
+                statusDiv.innerHTML = 'Сохраняем на GitHub...';
+                let sha = await getCurrentSHA(token);
+                await saveToGitHub(jsonString, sha, token);
+
+                statusDiv.innerHTML = '✅ Готово! Домашка обновлена на GitHub.';
+            } catch (err) {
+                statusDiv.innerHTML = `❌ Ошибка: ${err.message}`;
+                console.error(err);
+            }
+        };
+
+        // Автоподстановка сохранённого токена
+        let savedToken = localStorage.getItem('github_token');
+        if (savedToken) document.getElementById('token').value = savedToken;
+    </script>
+</body>
+</html>
