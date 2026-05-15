@@ -32,7 +32,7 @@
         const FILE = 'homework.json';
         const SCHOOL_API = 'https://edu.schools48.ru/apiv3/gethomework?devkey=6566345ff2850c724676decefe5c2117&out_format=json&auth_token=b73c9f3d2cf0def5559f0d5b472c8d677d6973881200dc781eb84a2a8cb13___209633&vendor=lpsk1733844979&student=1781';
         
-        const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+        const CORS_PROXY = 'https://cors-anywhere.herokuapp.com/';
 
         function formatDate(date) {
             let y = date.getFullYear();
@@ -49,7 +49,7 @@
             d2.setDate(now.getDate() + 7);
 
             let url = `${SCHOOL_API}&startdate=${formatDate(d1)}&enddate=${formatDate(d2)}`;
-            let proxiedUrl = CORS_PROXY + encodeURIComponent(url);
+            let proxiedUrl = CORS_PROXY + url;
             
             let response = await fetch(proxiedUrl);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -104,7 +104,6 @@
             return await res.json();
         }
 
-        // Загрузить токен из localStorage
         document.getElementById('saveToken').onclick = () => {
             let token = document.getElementById('token').value;
             if (token.startsWith('ghp_')) {
